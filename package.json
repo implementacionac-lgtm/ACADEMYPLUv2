@@ -1,0 +1,12 @@
+{
+  "name": "plu-academy",
+  "version": "1.0.0",
+  "description": "Aplicación interactiva para aprender y evaluar códigos PLU por departamentos.",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx -y http-server -p 3000 -o"
+  },
+  "keywords": ["plu", "training", "supermarket"],
+  "author": "Antigravity",
+  "license": "MIT"
+}
