@@ -1,20 +1,20 @@
-// ==========================================
-// CONFIGURACIÓN DE FIREBASE (Sustituye por tus llaves reales)
-// ==========================================
+// ========================================================
+// CONFIGURACIÓN DE FIREBASE (Asegúrate de pegar tus llaves)
+// ========================================================
 const firebaseConfig = {
-      apiKey: "AIzaSyDYKqALqrCBCQ6qWAbaUz--GaAqtniKOIU",
-      authDomain: "plu-academy.firebaseapp.com",
-      projectId: "plu-academy",
-      storageBucket: "plu-academy.firebasestorage.app",
-      messagingSenderId: "113074302558",
-      appId: "1:113074302558:web:7a6ca99ced0d4bd5c3cecf"
+    apiKey: "PEGA_AQUÍ_TU_API_KEY",
+    authDomain: "tu-app-proyecto.firebaseapp.com",
+    projectId: "tu-app-proyecto",
+    storageBucket: "tu-app-proyecto.appspot.com",
+    messagingSenderId: "1234567890",
+    appId: "1:1234567890:web:abcdef123456"
 };
 
-// Inicializar servicios
+// Inicializar Instancia Remota
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// Catálogos estáticos iniciales en caso de base de datos vacía
+// Datos Estáticos para Inyección Atómica Inicial
 const DEFAULT_AREAS = ["Carnes", "Frutas y Verduras", "Panaderia"];
 const DEFAULT_PLUS = [
     { id: "m1", code: "9644", name: "MUSLO PIERNA FRESCO", area: "Carnes", icon: "🥩" },
@@ -27,13 +27,13 @@ const DEFAULT_USERS = [
     { username: "Andres", password: "1234", badgeNumber: "1001", avatar: "⚡", store: "Matriz", score: 0, totalQuizzes: 0, accuracy: 0, streak: 0, level: "Principiante", categoryScores: {} }
 ];
 
-// Inicialización controlada
+// Comprobar e Inicializar Colecciones
 async function initDatabase() {
     try {
         const plusDoc = await db.collection("app_config").doc("plus_data").get();
         if (!plusDoc.exists) {
             await db.collection("app_config").doc("plus_data").set({ list: DEFAULT_PLUS });
-            console.log("🚀 Catálogo de artículos inicializado en Firestore.");
+            console.log("🔥 Catálogo maestro de PLUs desplegado.");
         }
         const areasDoc = await db.collection("app_config").doc("areas_data").get();
         if (!areasDoc.exists) {
@@ -45,11 +45,11 @@ async function initDatabase() {
                 await db.collection("users").doc(u.username.toLowerCase()).set(u);
             }
         }
-    } catch (e) { console.error("Error inicializando base remota:", e); }
+    } catch (e) { console.error("Error cargando entorno en la nube:", e); }
 }
 initDatabase();
 
-// Funciones CRUD del API Remoto
+// Capa de Abstracción CRUD (API Asíncrona)
 async function getPLUs() {
     const d = await db.collection("app_config").doc("plus_data").get();
     return d.exists ? d.data().list : [];
@@ -71,7 +71,7 @@ async function getUsers() {
     return res;
 }
 
-// Sesión Local Síncrona
+// Sincronización de Sesión de Navegador
 function getActiveUser() {
     const u = localStorage.getItem("plu_academy_active_user");
     return u ? JSON.parse(u) : null;
@@ -81,6 +81,7 @@ function setActiveUser(u) {
     else localStorage.removeItem("plu_academy_active_user");
 }
 
+// Actualización Atómica de Historial y Algoritmo de Rangos
 async function updateUserStats(username, correct, total, scoreGained, area) {
     const ref = db.collection("users").doc(username.toLowerCase());
     const doc = await ref.get();

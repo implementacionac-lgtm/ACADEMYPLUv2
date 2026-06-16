@@ -1,4 +1,4 @@
-// Variables de control de estado global
+// Variables Globales de Control de Estado
 let currentEditingPluId = null;
 let currentSelectedPluImage = null;
 let quizState = { list: [], currentIdx: 0, scoreGained: 0, correctAnswers: 0, mode: '', area: '', currentItem: null };
@@ -7,19 +7,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     initTabNavigation();
     initImageUploadListener();
     
+    // Escuchadores de Formularios Existentes
     document.getElementById("login-form").addEventListener("submit", loginFormSubmit);
     document.getElementById("btn-logout").addEventListener("click", logoutUser);
     document.getElementById("btn-start-quiz").addEventListener("click", startQuizGame);
     document.getElementById("study-area-filter").addEventListener("change", renderLearningContent);
 
-    // Verificar si ya hay una sesi車n activa guardada
+    // Conexi車n del Nuevo Formulario de Registro
+    document.getElementById("register-form").addEventListener("submit", registerFormSubmit);
+    
+    // Controladores de Intercambio de Vistas en Pantalla de Login
+    document.getElementById("link-to-register").addEventListener("click", (e) => {
+        e.preventDefault();
+        document.getElementById("login-form").style.display = "none";
+        document.getElementById("register-form").style.display = "block";
+        document.getElementById("login-title").textContent = "Nuevo Registro";
+        document.getElementById("login-subtitle").textContent = "迆nete al equipo de asociados";
+    });
+
+    document.getElementById("link-to-login").addEventListener("click", (e) => {
+        e.preventDefault();
+        document.getElementById("register-form").style.display = "none";
+        document.getElementById("login-form").style.display = "block";
+        document.getElementById("login-title").textContent = "PLU Academy";
+        document.getElementById("login-subtitle").textContent = "Ingresa tus credenciales para comenzar";
+    });
+
+    // Validar Persistencia de Sesi車n Activa
     const session = getActiveUser();
     if (session) {
         showAppShell(session);
     }
 });
 
-// Enrutador de la Interfaz Est芍tica (Tabs)
+// Enrutamiento Interno (Tabs)
 function initTabNavigation() {
     document.querySelectorAll(".nav-link").forEach(btn => {
         btn.addEventListener("click", async (e) => {
@@ -29,7 +50,6 @@ function initTabNavigation() {
             const targetTab = btn.getAttribute("data-tab");
             document.getElementById(`tab-${targetTab}`).classList.add("active");
             
-            // Carga bajo demanda seg迆n la pesta?a seleccionada
             if (targetTab === 'dashboard') updateDashboardStats();
             if (targetTab === 'study') await loadStudyTab();
             if (targetTab === 'quiz') await loadQuizSetup();
@@ -39,7 +59,7 @@ function initTabNavigation() {
     });
 }
 
-// Lector de archivos de imagen a Base64
+// Convertidor de Imagen de Art赤culo a Cadena Base64
 function initImageUploadListener() {
     const input = document.getElementById("plu-image-input");
     const preview = document.getElementById("plu-image-preview");
@@ -59,7 +79,7 @@ function initImageUploadListener() {
     });
 }
 
-// Autenticaci車n de Asociados
+// L車gica de Autenticaci車n (Login)
 async function loginFormSubmit(e) {
     e.preventDefault();
     const userIn = document.getElementById("login-username").value.trim();
@@ -72,7 +92,53 @@ async function loginFormSubmit(e) {
         setActiveUser(found);
         showAppShell(found);
     } else {
-        alert("Credenciales incorrectas o el usuario no existe en la sucursal.");
+        alert("Credenciales incorrectas o el usuario no existe.");
+    }
+}
+
+// L車gica para Registrar Nuevos Usuarios en Firestore
+async function registerFormSubmit(e) {
+    e.preventDefault();
+    const username = document.getElementById("reg-username").value.trim();
+    const password = document.getElementById("reg-password").value;
+    const store = document.getElementById("reg-store").value;
+
+    if (username.length < 3) {
+        alert("El nombre de usuario debe contener m赤nimo 3 caracteres.");
+        return;
+    }
+
+    try {
+        const userRef = db.collection("users").doc(username.toLowerCase());
+        const docSnap = await userRef.get();
+
+        if (docSnap.exists) {
+            alert(`El usuario "${username}" ya se encuentra registrado.`);
+            return;
+        }
+
+        const newUser = {
+            username: username,
+            password: password,
+            store: store,
+            badgeNumber: "10" + Math.floor(Math.random() * 90 + 10),
+            avatar: ["?", "??", "??", "??", "??", "??"][Math.floor(Math.random() * 6)],
+            score: 0,
+            totalQuizzes: 0,
+            accuracy: 0,
+            streak: 0,
+            level: "Principiante",
+            categoryScores: {}
+        };
+
+        await userRef.set(newUser);
+        setActiveUser(newUser);
+        showAppShell(newUser);
+        document.getElementById("register-form").reset();
+        alert(`?Cuenta creada con 谷xito! Bienvenido, ${username}.`);
+    } catch (err) {
+        console.error("Error en registro:", err);
+        alert("Fallo de conexi車n al procesar el registro.");
     }
 }
 
@@ -102,7 +168,7 @@ function updateDashboardStats() {
     document.getElementById("user-level").textContent = u.level;
 }
 
-// Carga de M車dulo de Estudio
+// M車dulo de Estudio / Tarjetas de Cat芍logo
 async function loadStudyTab() {
     const areas = await getAreas();
     const filter = document.getElementById("study-area-filter");
@@ -113,7 +179,7 @@ async function loadStudyTab() {
 
 async function renderLearningContent() {
     const container = document.getElementById("learning-container");
-    container.innerHTML = "<p>Cargando cat芍logo...</p>";
+    container.innerHTML = "<p>Descargando cat芍logo...</p>";
     const plus = await getPLUs();
     const filterVal = document.getElementById("study-area-filter").value;
     
@@ -121,7 +187,7 @@ async function renderLearningContent() {
     container.innerHTML = "";
 
     if(filtered.length === 0) {
-        container.innerHTML = "<p>No hay art赤culos registrados en esta 芍rea.</p>";
+        container.innerHTML = "<p>No hay art赤culos registrados en esta secci車n.</p>";
         return;
     }
 
@@ -134,13 +200,13 @@ async function renderLearningContent() {
             <div class="fc-card">
                 ${media}
                 <h3>${p.name}</h3>
-                <p class="badge" style="margin-top:8px;">PLU: ${p.code}</p>
+                <p class="badge" style="margin-top:8px; margin-left:auto; margin-right:auto;">PLU: ${p.code}</p>
             </div>
         `;
     });
 }
 
-// Operaci車n del Simulador / Juego
+// M芍quina de Estados del Simulador Quiz
 async function loadQuizSetup() {
     const areas = await getAreas();
     const select = document.getElementById("quiz-area-filter");
@@ -155,21 +221,12 @@ async function startQuizGame() {
 
     let filtered = area === 'todas' ? plus : plus.filter(p => p.area === area);
     if (filtered.length < 4) {
-        alert("Necesitas al menos 4 art赤culos en este departamento para simular.");
+        alert("Se necesitan m赤nimo 4 art赤culos registrados en este departamento para jugar.");
         return;
     }
 
-    // Mezclar y tomar un bloque de 10 preguntas
     filtered.sort(() => Math.random() - 0.5);
-    quizState = {
-        list: filtered.slice(0, 10),
-        currentIdx: 0,
-        scoreGained: 0,
-        correctAnswers: 0,
-        mode: mode,
-        area: area,
-        currentItem: null
-    };
+    quizState = { list: filtered.slice(0, 10), currentIdx: 0, scoreGained: 0, correctAnswers: 0, mode: mode, area: area, currentItem: null };
 
     document.getElementById("quiz-setup").style.display = "none";
     document.getElementById("quiz-game").style.display = "block";
@@ -204,7 +261,6 @@ function showNextQuizQuestion() {
         prompt.textContent = `?A qu谷 art赤culo corresponde este c車digo PLU?`;
     }
 
-    // Generar opciones de respuesta incorrectas (Distractores)
     const allItems = quizState.list;
     let distractors = allItems.filter(i => i.id !== item.id).sort(() => Math.random() - 0.5).slice(0, 3);
     distractors.push(item);
@@ -237,16 +293,16 @@ async function endQuizGame() {
     document.getElementById("quiz-setup").style.display = "block";
     
     const u = getActiveUser();
-    alert(`Simulaci車n terminada.\nRespuestas correctas: ${quizState.correctAnswers}/10\nPuntos obtenidos: ${quizState.scoreGained}`);
+    alert(`Simulaci車n concluida.\nResultados: ${quizState.correctAnswers}/10 correctas.\nPuntos obtenidos: ${quizState.scoreGained}`);
     
     await updateUserStats(u.username, quizState.correctAnswers, quizState.list.length, quizState.scoreGained, quizState.area);
     updateDashboardStats();
 }
 
-// Pintar la tabla de L赤deres
+// Renderizar Tabla de Ranking Global
 async function renderLeaderboard() {
     const tbody = document.getElementById("leaderboard-body");
-    tbody.innerHTML = "<tr><td colspan='5'>Descargando ranking...</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='5'>Sincronizando tabla de posiciones...</td></tr>";
     const users = await getUsers();
     tbody.innerHTML = "";
     
@@ -263,10 +319,10 @@ async function renderLeaderboard() {
     });
 }
 
-// M車dulo CRUD de Administraci車n
+// Operaciones del Panel de Administraci車n CRUD
 async function renderAdminPLUTable() {
     const tbody = document.getElementById("admin-table-body");
-    tbody.innerHTML = "<tr><td colspan='5'>Cargando cat芍logo...</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='5'>Cargando base de datos...</td></tr>";
     const plus = await getPLUs();
     tbody.innerHTML = "";
 
@@ -353,17 +409,15 @@ async function savePluFormSubmit() {
 
     let plus = await getPLUs();
 
-    // Evitar c車digos duplicados
+    // Validar duplicados de c車digos PLU
     if (plus.some(p => p.code === code && p.id !== id)) {
-        alert(`Error cr赤tico: El c車digo PLU "${code}" ya est芍 asignado a otro art赤culo.`);
+        alert(`Error: El c車digo PLU "${code}" ya se encuentra en uso.`);
         return;
     }
 
     if (id) {
-        // Editar
         plus = plus.map(p => p.id === id ? { ...p, code, name, area, icon, image } : p);
     } else {
-        // Crear
         plus.push({ id: "item_" + Date.now(), code, name, area, icon, image });
     }
 
