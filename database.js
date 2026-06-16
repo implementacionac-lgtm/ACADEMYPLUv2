@@ -1,5 +1,24 @@
-// Base de Datos inicial de PLU y gestión de almacenamiento local
+// Base de Datos de PLU y gestión de almacenamiento en Firebase Firestore
 
+// ==========================================
+// 1. CONFIGURACIÓN DE FIREBASE
+// ==========================================
+const firebaseConfig = {
+      apiKey: "AIzaSyDYKqALqrCBCQ6qWAbaUz--GaAqtniKOIU",
+	 authDomain: "plu-academy.firebaseapp.com",
+     projectId: "plu-academy",
+     storageBucket: "plu-academy.firebasestorage.app",
+     messagingSenderId: "113074302558",
+     appId: "1:113074302558:web:7a6ca99ced0d4bd5c3cecf"
+};
+
+// Inicializar la conexión con la nube
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ==========================================
+// 2. VALORES POR DEFECTO PARA INICIALIZACIÓN
+// ==========================================
 const DEFAULT_AREAS = [
     "Carnes",
     "Frutas y Verduras",
@@ -113,7 +132,7 @@ const DEFAULT_PLUS = [
     { id: "p40", code: "228", name: "PAN TIPO BAGUETTE CR UNIDAD", area: "Panaderia", icon: "🥖" },
     { id: "p41", code: "9010", name: "DOMO MARIA LUISA", area: "Panaderia", icon: "🍰" },
 
-    // ===================== FRUTAS Y VERDURAS (57 items) =====================
+    // ===================== FRUTAS Y VERDURAS (59 items) =====================
     { id: "f1", code: "4227", name: "AGUACATE CRIOLLO UND", area: "Frutas y Verduras", icon: "🥑" },
     { id: "f2", code: "7496", name: "AGUACATE HASS UN", area: "Frutas y Verduras", icon: "🥑" },
     { id: "f3", code: "7013", name: "APIO 454 G LB", area: "Frutas y Verduras", icon: "🥬" },
@@ -176,69 +195,113 @@ const DEFAULT_PLUS = [
 ];
 
 const DEFAULT_USERS = [
-    { username: "Andres", password: "1234", badgeNumber: "1001", avatar: "⚡", store: "Matriz", score: 0, totalQuizzes: 0, accuracy: 0, streak: 0, level: "Principiante", categoryScores: {} }
+    { username: "Andres", password: "1234", badgeNumber: "1001", avatar: "⚡", store: "Maxi Despensa Usulután", score: 0, totalQuizzes: 0, accuracy: 0, streak: 0, level: "Principiante", categoryScores: {} }
 ];
 
-function initDatabase() {
-    // Migración a versión 5 (añadir store)
-    const currentVersion = localStorage.getItem("plu_academy_db_ver");
-    if (currentVersion !== "v5") {
-        let users = JSON.parse(localStorage.getItem("plu_academy_users"));
-        if (!users || users.length === 0) {
-            users = DEFAULT_USERS;
-        } else {
-            users = users.map(u => ({
-                ...u,
-                badgeNumber: u.badgeNumber || (u.username.toLowerCase() === "andres" ? "1001" : "10" + Math.floor(Math.random() * 90 + 10)),
-                avatar: u.avatar || (u.username.toLowerCase() === "andres" ? "⚡" : "👤"),
-                store: u.store || "Sin Asignar",
-                categoryScores: u.categoryScores || {}
-            }));
+// ==========================================
+// 3. INICIALIZACIÓN DE ENTORNO EN LA NUBE
+// ==========================================
+async function initDatabase() {
+    try {
+        // Verificar y cargar catálogo de PLUs en un documento consolidado (Ahorro de lecturas)
+        const plusDoc = await db.collection("app_config").doc("plus_data").get();
+        if (!plusDoc.exists) {
+            await db.collection("app_config").doc("plus_data").set({ list: DEFAULT_PLUS });
+            console.log("✅ PLUs base inicializados en Cloud Firestore.");
         }
-        localStorage.setItem("plu_academy_users", JSON.stringify(users));
-        localStorage.removeItem("plu_academy_active_user"); // Forzar re-login para refrescar sesión
-        localStorage.setItem("plu_academy_db_ver", "v5");
-    }
 
-    // Siempre cargar PLUs por defecto para garantizar datos limpios
-    localStorage.setItem("plu_academy_plus", JSON.stringify(DEFAULT_PLUS));
-    localStorage.setItem("plu_academy_areas", JSON.stringify(DEFAULT_AREAS));
+        // Verificar y cargar departamentos/áreas
+        const areasDoc = await db.collection("app_config").doc("areas_data").get();
+        if (!areasDoc.exists) {
+            await db.collection("app_config").doc("areas_data").set({ list: DEFAULT_AREAS });
+            console.log("✅ Departamentos base inicializados en Cloud Firestore.");
+        }
 
-    if (!localStorage.getItem("plu_academy_users")) {
-        localStorage.setItem("plu_academy_users", JSON.stringify(DEFAULT_USERS));
+        // Verificar e inicializar primer usuario admin de pruebas
+        const usersSnap = await db.collection("users").limit(1).get();
+        if (usersSnap.empty) {
+            for (let user of DEFAULT_USERS) {
+                await db.collection("users").doc(user.username.toLowerCase()).set(user);
+            }
+            console.log("✅ Equipo de asociados inicializado en la nube.");
+        }
+    } catch (error) {
+        console.error("Error crítico durante la inicialización de Firestore:", error);
     }
 }
 
+// Arrancar la verificación
 initDatabase();
 
-// Métodos de acceso para PLUs
-function getPLUs() {
-    return JSON.parse(localStorage.getItem("plu_academy_plus"));
+// ==========================================
+// 4. OPERACIONES ASÍNCRONAS CRUD (API)
+// ==========================================
+
+async function getPLUs() {
+    try {
+        const docSnap = await db.collection("app_config").doc("plus_data").get();
+        return docSnap.exists ? docSnap.data().list : [];
+    } catch (err) {
+        console.error("Error al descargar PLUs:", err);
+        return [];
+    }
 }
 
-function savePLUs(plus) {
-    localStorage.setItem("plu_academy_plus", JSON.stringify(plus));
+async function savePLUs(plusArray) {
+    try {
+        await db.collection("app_config").doc("plus_data").set({ list: plusArray });
+    } catch (err) {
+        console.error("Error al guardar catálogo de PLUs:", err);
+    }
 }
 
-// Métodos de acceso para Áreas
-function getAreas() {
-    return JSON.parse(localStorage.getItem("plu_academy_areas"));
+async function getAreas() {
+    try {
+        const docSnap = await db.collection("app_config").doc("areas_data").get();
+        return docSnap.exists ? docSnap.data().list : [];
+    } catch (err) {
+        console.error("Error al descargar departamentos:", err);
+        return [];
+    }
 }
 
-function saveAreas(areas) {
-    localStorage.setItem("plu_academy_areas", JSON.stringify(areas));
+async function saveAreas(areasArray) {
+    try {
+        await db.collection("app_config").doc("areas_data").set({ list: areasArray });
+    } catch (err) {
+        console.error("Error al guardar departamentos:", err);
+    }
 }
 
-// Métodos de acceso para Usuarios
-function getUsers() {
-    const users = JSON.parse(localStorage.getItem("plu_academy_users"));
-    return users.sort((a, b) => b.score - a.score); // Ordenar por puntaje (Ranking)
+async function getUsers() {
+    try {
+        // Ordenamos directo desde el motor de indexación de Firebase para construir el Ranking reactivo
+        const querySnapshot = await db.collection("users").orderBy("score", "desc").get();
+        let users = [];
+        querySnapshot.forEach((doc) => {
+            users.push(doc.data());
+        });
+        return users;
+    } catch (err) {
+        console.error("Error al estructurar lista de asociados:", err);
+        return [];
+    }
 }
 
-function saveUsers(users) {
-    localStorage.setItem("plu_academy_users", JSON.stringify(users));
+async function saveUsers(usersArray) {
+    try {
+        const batch = db.batch();
+        usersArray.forEach(user => {
+            const ref = db.collection("users").doc(user.username.toLowerCase());
+            batch.set(ref, user);
+        });
+        await batch.commit();
+    } catch (err) {
+        console.error("Error en persistencia masiva de asociados (Batch):", err);
+    }
 }
 
+// El usuario de la sesión actual del navegador se mantiene en LocalStorage por velocidad
 function getActiveUser() {
     const active = localStorage.getItem("plu_academy_active_user");
     return active ? JSON.parse(active) : null;
@@ -252,72 +315,76 @@ function setActiveUser(user) {
     }
 }
 
-// Calcular Nivel según puntuación
 function calculateLevel(score) {
-    if (score >= 1200) return "Maestro PLU";
-    if (score >= 800) return "Cajero Senior";
-    if (score >= 400) return "Cajero Junior";
+    if (score >= 5000) return "Maestra PLU";
+    if (score >= 2000) return "Cajero Senior";
+    if (score >= 800) return "Cajero Junior";
     return "Principiante";
 }
 
-// Actualizar puntuación e historial
-function updateUserStats(username, correctAnswers, totalQuestions, scoreGained, area) {
-    const users = getUsers();
-    let userIndex = users.findIndex(u => u.username.toLowerCase() === username.toLowerCase());
-    
-    let user;
-    if (userIndex === -1) {
-        // Crear usuario si no existe
-        user = {
-            username: username,
-            score: 0,
-            totalQuizzes: 0,
-            accuracy: 0,
-            streak: 0,
-            level: "Principiante",
-            categoryScores: {}
-        };
-        users.push(user);
-        userIndex = users.length - 1;
-    } else {
-        user = users[userIndex];
-    }
-    
-    if (!user.categoryScores) user.categoryScores = {};
+// Guarda de forma aislada y atómica los resultados de las simulaciones en internet
+async function updateUserStats(username, correctAnswers, totalQuestions, scoreGained, area) {
+    try {
+        const userRef = db.collection("users").doc(username.toLowerCase());
+        const docSnap = await userRef.get();
+        
+        let user;
+        if (!docSnap.exists) {
+            user = {
+                username: username,
+                score: 0,
+                totalQuizzes: 0,
+                accuracy: 0,
+                streak: 0,
+                level: "Principiante",
+                categoryScores: {},
+                badgeNumber: "10" + Math.floor(Math.random() * 90 + 10),
+                avatar: "👤",
+                store: "General",
+                password: "123" // Clave por defecto si es autocreado por bug
+            };
+        } else {
+            user = docSnap.data();
+        }
+        
+        if (!user.categoryScores) user.categoryScores = {};
 
-    // Actualizar campos
-    user.totalQuizzes += 1;
-    user.score = Math.max(0, user.score + scoreGained);
-    
-    if (area && area !== 'todas') {
-        user.categoryScores[area] = (user.categoryScores[area] || 0) + scoreGained;
-    }
-    
-    // Recalcular precisión promedio
-    const newAccuracy = Math.round((correctAnswers / totalQuestions) * 100);
-    if (user.accuracy === 0) {
-        user.accuracy = newAccuracy;
-    } else {
-        user.accuracy = Math.round((user.accuracy * (user.totalQuizzes - 1) + newAccuracy) / user.totalQuizzes);
-    }
+        // Actualización de campos numéricos
+        user.totalQuizzes += 1;
+        user.score = Math.max(0, user.score + scoreGained);
+        
+        if (area && area !== 'todas') {
+            user.categoryScores[area] = (user.categoryScores[area] || 0) + scoreGained;
+        }
+        
+        // Recalcular promedio de precisión acumulada
+        const newAccuracy = Math.round((correctAnswers / totalQuestions) * 100);
+        if (user.accuracy === 0) {
+            user.accuracy = newAccuracy;
+        } else {
+            user.accuracy = Math.round((user.accuracy * (user.totalQuizzes - 1) + newAccuracy) / user.totalQuizzes);
+        }
 
-    // Racha actual (en base a este quiz o lógica simple)
-    if (newAccuracy >= 80) {
-        user.streak += 1;
-    } else {
-        user.streak = 0;
-    }
+        // Sistema de control de racha
+        if (newAccuracy >= 80) {
+            user.streak += 1;
+        } else {
+            user.streak = 0;
+        }
 
-    user.level = calculateLevel(user.score);
-    
-    // Guardar cambios
-    saveUsers(users);
-    
-    // Actualizar usuario activo si es el mismo
-    const active = getActiveUser();
-    if (active && active.username.toLowerCase() === username.toLowerCase()) {
-        setActiveUser(user);
+        user.level = calculateLevel(user.score);
+        
+        // Impactar directamente el documento individual en la nube
+        await userRef.set(user);
+        
+        // Sincronizar el estado de sesión local de la pestaña activa del navegador
+        const active = getActiveUser();
+        if (active && active.username.toLowerCase() === username.toLowerCase()) {
+            setActiveUser(user);
+        }
+        
+        return user;
+    } catch (err) {
+        console.error("Error al actualizar histórico de simulación en la nube:", err);
     }
-    
-    return user;
 }
